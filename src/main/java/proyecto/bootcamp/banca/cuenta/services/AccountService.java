@@ -14,12 +14,14 @@ import proyecto.bootcamp.banca.cuenta.repository.ClientRepository;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 @AllArgsConstructor
 @Service
@@ -50,22 +52,15 @@ public class AccountService {
         ClientAccount clientAccount=getClientAccount(nroAccount);
         LocalDate localDate;
         Date today=new Date();
-//        Boolean apply= clientAccount.getMovements().stream().filter(m->{
-//
-//            Integer month= today.getMonth();
-//            Integer year= today.getYear();
-//            return m.getDate().getMonth()==month && m.getDate().getYear()==year;
-////            Date firstDay= new Date();
-////
-////            firstDay.setHours(0);
-////            firstDay.setMinutes(0);
-////            firstDay.setSeconds(0);
-////            firstDay.(0);
-////            firstDay.setMonth(m.getDate().getMonth());
-////            firstDay.setYear(m.getDate().getYear());
-//
-//        })
+        List<Movement> newListM= clientAccount.getMovements().stream().filter(m->{
 
+            Integer month= today.getMonth();
+            Integer year= today.getYear();
+            return m.getDate().getMonth()==month && m.getDate().getYear()==year;
+        }).collect(Collectors.toList());
+        System.out.println(newListM);
+        Integer countM=newListM.size();
+        System.out.println("size= "+countM);
 
         if(this.isAllowedMovement(clientAccount)){
             Movement increaseMoviment= new Movement("deposito",amount,new Date());
@@ -115,11 +110,23 @@ public class AccountService {
 
     private Boolean isAllowedMovement(ClientAccount clientAccount){
         Date today= new Date();
+        Calendar calendar= Calendar.getInstance();
+        calendar.setTime(today);
+        Integer countMovsApply= clientAccount.getMovements().stream()
+                .filter(m->{
+                            Integer month= today.getMonth();
+                            Integer year= today.getYear();
+                            return m.getDate().getMonth()==month && m.getDate().getYear()==year;
+                        })
+                .collect(Collectors.toList()).size();
+
         BiPredicate<Integer,Integer> maxMovements= (confAccount,clientMovs)->confAccount.equals(-1)||confAccount>clientMovs;
+        Predicate<Integer> dayAllowed=confAccount->confAccount.equals(0)||confAccount.equals(calendar.get(Calendar.DAY_OF_MONTH));
 
-        Predicate<Integer> dayAllowed=confAccount->confAccount.equals(0)||confAccount.equals(today.getDay());
+        System.out.println("Movimientos del mes: "+countMovsApply);
+        System.out.println("Dia configurado: "+clientAccount.getAccountType().getConditions().getDiaMovement()+" Día hoy: "+calendar.get(Calendar.DAY_OF_MONTH));
 
-        return maxMovements.test(clientAccount.getAccountType().getConditions().getMaxMovement(),clientAccount.getMovements()!=null?clientAccount.getMovements().size():0)
+        return maxMovements.test(clientAccount.getAccountType().getConditions().getMaxMovement(),countMovsApply)
                 && dayAllowed.test(clientAccount.getAccountType().getConditions().getDiaMovement());
 
     }
