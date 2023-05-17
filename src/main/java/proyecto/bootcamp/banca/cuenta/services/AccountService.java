@@ -47,59 +47,47 @@ public class AccountService {
     public ClientAccount getClientAccountbyId(String idAccount){
         return clientAccountRepository.findById(idAccount).get();
     }
-
+//  Agrega un depósito a la cuenta
     public Boolean addDeposit(String nroAccount, Double amount){
         ClientAccount clientAccount=getClientAccount(nroAccount);
-        LocalDate localDate;
-        Date today=new Date();
-        List<Movement> newListM= clientAccount.getMovements().stream().filter(m->{
-
-            Integer month= today.getMonth();
-            Integer year= today.getYear();
-            return m.getDate().getMonth()==month && m.getDate().getYear()==year;
-        }).collect(Collectors.toList());
-        System.out.println(newListM);
-        Integer countM=newListM.size();
-        System.out.println("size= "+countM);
-
-        if(this.isAllowedMovement(clientAccount)){
-            Movement increaseMoviment= new Movement("deposito",amount,new Date());
-            List<Movement> listMovements= clientAccount.getMovements()!=null?clientAccount.getMovements():new ArrayList<>();
-            listMovements.add(increaseMoviment);
-            clientAccount.setMovements(listMovements);
-            clientAccount.setSaldo(clientAccount.getSaldo()+amount);
-            clientAccountRepository.save(clientAccount);
-            return true;
-        }
-        else{
-            return false;
-        }
-
+        Supplier<Boolean> suMov=()->{
+            if(this.isAllowedMovement(clientAccount)){
+                Movement addMoviment= new Movement("deposito",amount,new Date());
+                List<Movement> listMovements= clientAccount.getMovements()!=null?clientAccount.getMovements():new ArrayList<>();
+                listMovements.add(addMoviment);
+                clientAccount.setMovements(listMovements);
+                clientAccount.setSaldo(clientAccount.getSaldo()+amount);
+                clientAccountRepository.save(clientAccount);
+                return true;
+            }
+            else{
+                return false;
+            }
+        };
+        return suMov.get();
     }
-
+//Agrega un retiro a la cuenta
     public Boolean addWithdrawal(String nroAccount, Double amount){
         ClientAccount clientAccount=getClientAccount(nroAccount);
-        Movement increaseMoviment= new Movement("retiro",amount,new Date());
         BiPredicate<Double,Double> biOutdraw= (s,m)->s.compareTo(m)<0;
         Supplier<Boolean> suMovs=()->{
             if(biOutdraw.test(clientAccount.getSaldo(),amount) )
             {
-                System.out.println("suMovs if");
                 return false;
             }
             else
             {
                 if(this.isAllowedMovement(clientAccount)){
-                    System.out.println("suMovs else");
+                    Movement addMoviment= new Movement("retiro",amount,new Date());
                     List<Movement> listMovements= clientAccount.getMovements()!=null?clientAccount.getMovements():new ArrayList<>();
-                    listMovements.add(increaseMoviment);
+                    listMovements.add(addMoviment);
                     clientAccount.setMovements(listMovements);
                     clientAccount.setSaldo(clientAccount.getSaldo()-amount);
                     clientAccountRepository.save(clientAccount);
                     return true;
                 }
                 else {
-                    System.out.println("filtro validaciones");
+                    System.out.println("filtro validaciones de cuenta");
                     return false;
                 }
 
@@ -108,6 +96,8 @@ public class AccountService {
         return suMovs.get();
         }
 
+        // Método Privado que verifica la configuración de la cuenta y detecta si es permitido
+        // un movimiento adicional
     private Boolean isAllowedMovement(ClientAccount clientAccount){
         Date today= new Date();
         Calendar calendar= Calendar.getInstance();

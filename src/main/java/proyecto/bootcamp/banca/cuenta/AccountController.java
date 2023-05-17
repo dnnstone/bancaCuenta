@@ -18,7 +18,6 @@ public class AccountController {
     @GetMapping()
     public List<ClientAccount> fetchAllClientAccount(){
         return accountService.getAllClientAccount();
-//    return Arrays.asList("tres","dos","uno");
     }
 
     @GetMapping("/{nroCuenta}")
@@ -43,8 +42,4 @@ public class AccountController {
                                         @RequestParam("monto") Double amount){
         return accountService.addWithdrawal(nroCuenta, amount);
     }
-//    @GetMapping
-//    public List<Client> listarTodo(){
-//        return accountService.getAllClients();
-//    }
 }
