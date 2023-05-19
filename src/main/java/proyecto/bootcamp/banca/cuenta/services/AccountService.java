@@ -1,11 +1,15 @@
 package proyecto.bootcamp.banca.cuenta.services;
 
 import lombok.AllArgsConstructor;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.util.BsonUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 import proyecto.bootcamp.banca.cuenta.model.Client;
 import proyecto.bootcamp.banca.cuenta.model.ClientAccount;
 import proyecto.bootcamp.banca.cuenta.model.Movement;
@@ -22,14 +26,17 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 @AllArgsConstructor
 @Service
 public class AccountService {
     private final ClientAccountRepository clientAccountRepository;
     private final ClientRepository clientRepository;
     private final MongoTemplate mongoTemplate;
-
+    private static final Logger logger = LoggerFactory.getLogger(AccountService.class);
+    @Autowired
+    private Environment env;
 
     public List<ClientAccount> getAllClientAccount(){
         return clientAccountRepository.findAll();
@@ -41,8 +48,17 @@ public class AccountService {
     public ClientAccount getClientAccount(String nroAccount){
         Query query =new Query();
         query.addCriteria(Criteria.where("nAccount").is(nroAccount));
-        return mongoTemplate.findOne(query, ClientAccount.class);
-//        return clientAccountRepository.findOne();
+        ClientAccount clientAccount= mongoTemplate.findOne(query, ClientAccount.class);
+
+        String uri= env.getProperty("apis.cliente")+clientAccount.getClient().getId();
+        logger.info("Dnns: Url: "+uri);
+        RestTemplate restTemplate= new RestTemplate();
+
+        Client client= restTemplate.getForObject(uri, Client.class);
+        clientAccount.setClient(client);
+
+        return clientAccount;
+
     }
     public ClientAccount getClientAccountbyId(String idAccount){
         return clientAccountRepository.findById(idAccount).get();
@@ -87,7 +103,7 @@ public class AccountService {
                     return true;
                 }
                 else {
-                    System.out.println("filtro validaciones de cuenta");
+                    logger.info("filtro validaciones de cuenta");
                     return false;
                 }
 
@@ -102,20 +118,21 @@ public class AccountService {
         Date today= new Date();
         Calendar calendar= Calendar.getInstance();
         calendar.setTime(today);
-        Integer countMovsApply= clientAccount.getMovements().stream()
+        Integer countMovsApply= (int)clientAccount.getMovements().stream()
                 .filter(m->{
                             Integer month= today.getMonth();
                             Integer year= today.getYear();
                             return m.getDate().getMonth()==month && m.getDate().getYear()==year;
-                        })
-                .collect(Collectors.toList()).size();
+                        }).count();
+
+          //      .collect(Collectors.toList()).size();
 
         BiPredicate<Integer,Integer> maxMovements= (confAccount,clientMovs)->confAccount.equals(-1)||confAccount>clientMovs;
         Predicate<Integer> dayAllowed=confAccount->confAccount.equals(0)||confAccount.equals(calendar.get(Calendar.DAY_OF_MONTH));
 
-        System.out.println("Movimientos del mes: "+countMovsApply);
-        System.out.println("Dia configurado: "+clientAccount.getAccountType().getConditions().getDiaMovement()+" Día hoy: "+calendar.get(Calendar.DAY_OF_MONTH));
 
+        logger.info("Dnns: Movimientos del mes: "+countMovsApply);
+        logger.info("Dnns: Dia configurado: "+clientAccount.getAccountType().getConditions().getDiaMovement()+" Día hoy: "+calendar.get(Calendar.DAY_OF_MONTH));
         return maxMovements.test(clientAccount.getAccountType().getConditions().getMaxMovement(),countMovsApply)
                 && dayAllowed.test(clientAccount.getAccountType().getConditions().getDiaMovement());
 

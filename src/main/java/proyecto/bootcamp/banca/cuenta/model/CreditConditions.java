@@ -6,7 +6,7 @@ import lombok.Data;
 public class CreditConditions {
     private Integer maxCredits;
 
-    public CreditConditions(Integer maxCredits) {
-        this.maxCredits = maxCredits;
-    }
+//    public CreditConditions(Integer maxCredits) {
+//        this.maxCredits = maxCredits;
+//    }
 }

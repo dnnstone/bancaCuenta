@@ -14,10 +14,10 @@ public class Client {
     private String names;
     private ClientType typeClient;
 
-    public Client(String nDoc, String tDoc, String names, ClientType typeClient) {
-        this.nDoc = nDoc;
-        this.tDoc = tDoc;
-        this.names = names;
-        this.typeClient = typeClient;
-    }
+//    public Client(String nDoc, String tDoc, String names, ClientType typeClient) {
+//        this.nDoc = nDoc;
+//        this.tDoc = tDoc;
+//        this.names = names;
+//        this.typeClient = typeClient;
+//    }
 }

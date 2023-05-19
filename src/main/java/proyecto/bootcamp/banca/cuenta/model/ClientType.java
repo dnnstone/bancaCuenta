@@ -13,9 +13,9 @@ public class ClientType {
     private AccountConditions accountConditions;
     private CreditConditions creditConditions;
 
-    public ClientType(String name, AccountConditions accountConditions, CreditConditions creditConditions) {
-        this.name = name;
-        this.accountConditions = accountConditions;
-        this.creditConditions = creditConditions;
-    }
+//    public ClientType(String name, AccountConditions accountConditions, CreditConditions creditConditions) {
+//        this.name = name;
+//        this.accountConditions = accountConditions;
+//        this.creditConditions = creditConditions;
+//    }
 }
