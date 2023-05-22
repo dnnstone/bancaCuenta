@@ -1,10 +1,12 @@
 package proyecto.bootcamp.banca.cuenta.services;
 
+import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.core.Maybe;
 import lombok.AllArgsConstructor;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
-import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.util.BsonUtils;
@@ -28,44 +30,68 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.adapter.rxjava.RxJava3Adapter;
+
 @AllArgsConstructor
 @Service
 public class AccountService {
     private final ClientAccountRepository clientAccountRepository;
     private final ClientRepository clientRepository;
-    private final MongoTemplate mongoTemplate;
+    @Autowired
+    private final ReactiveMongoTemplate mongoTemplate;
     private static final Logger logger = LoggerFactory.getLogger(AccountService.class);
     @Autowired
     private Environment env;
 
-    public List<ClientAccount> getAllClientAccount(){
-        return clientAccountRepository.findAll();
-    }
-    public List<Client> getAllClients()
-    {
-        return clientRepository.findAll();
-    }
-    public ClientAccount getClientAccount(String nroAccount){
+    public Maybe<ClientAccount> getClientAccount(String nroAccount){
         Query query =new Query();
         query.addCriteria(Criteria.where("nAccount").is(nroAccount));
-        ClientAccount clientAccount= mongoTemplate.findOne(query, ClientAccount.class);
-
-        String uri= env.getProperty("apis.cliente")+clientAccount.getClient().getId();
-        logger.info("Dnns: Url: "+uri);
-        RestTemplate restTemplate= new RestTemplate();
-
-        Client client= restTemplate.getForObject(uri, Client.class);
-        clientAccount.setClient(client);
-
-        return clientAccount;
+        return mongoTemplate.
+                findOne(query, ClientAccount.class)
+                .as(RxJava3Adapter::monoToMaybe)
+                .map(client->{
+                    RestTemplate restTemplate= new RestTemplate();
+                    client.setClient(restTemplate.getForObject(env.getProperty("apis.cliente")+client.getClient().getId(), Client.class));;
+                    return client;
+                });
 
     }
-    public ClientAccount getClientAccountbyId(String idAccount){
-        return clientAccountRepository.findById(idAccount).get();
+
+    public Maybe<ClientAccount> addReactiveDeposit(String nroAccount, Double amount){
+
+        this.getClientAccount(nroAccount).subscribe(System.out::println);
+        return this.getClientAccount(nroAccount)
+                .filter(this::isAllowedMovement)
+                .map(cl->{
+                    cl.setSaldo(cl.getSaldo()+amount);
+                    List<Movement> listMov= cl.getMovements();
+                    listMov.add(new Movement("deposito",amount,new Date()));
+                    cl.setMovements(listMov);
+                    return cl;
+                })
+                .to(RxJava3Adapter::maybeToMono)
+                .flatMap(clientAccountRepository::save)
+                .as(RxJava3Adapter::monoToMaybe);
+
     }
 //  Agrega un depósito a la cuenta
+    public Maybe<ClientAccount> addReactiveWithdrawal(String nroAccount, Double amount){
+        return this.getClientAccount(nroAccount)
+                .filter(this::isAllowedMovement)    //filtros de cantidad de movs y fecha
+                .filter(s->s.getSaldo().compareTo(amount)>=0)   //filtro de saldo positivo
+                .map(cl->{
+                    cl.setSaldo(cl.getSaldo()-amount);
+                    List<Movement> listMov= cl.getMovements();
+                    listMov.add(new Movement("retiro",amount,new Date()));
+                    cl.setMovements(listMov);
+                    return cl;
+                })
+                .to(RxJava3Adapter::maybeToMono)
+                .flatMap(clientAccountRepository::save)
+                .as(RxJava3Adapter::monoToMaybe);
+}
     public Boolean addDeposit(String nroAccount, Double amount){
-        ClientAccount clientAccount=getClientAccount(nroAccount);
+        ClientAccount clientAccount=getClientAccount(nroAccount).blockingGet();
         Supplier<Boolean> suMov=()->{
             if(this.isAllowedMovement(clientAccount)){
                 Movement addMoviment= new Movement("deposito",amount,new Date());
@@ -84,7 +110,7 @@ public class AccountService {
     }
 //Agrega un retiro a la cuenta
     public Boolean addWithdrawal(String nroAccount, Double amount){
-        ClientAccount clientAccount=getClientAccount(nroAccount);
+        ClientAccount clientAccount=getClientAccount(nroAccount).blockingGet();
         BiPredicate<Double,Double> biOutdraw= (s,m)->s.compareTo(m)<0;
         Supplier<Boolean> suMovs=()->{
             if(biOutdraw.test(clientAccount.getSaldo(),amount) )
@@ -136,6 +162,13 @@ public class AccountService {
         return maxMovements.test(clientAccount.getAccountType().getConditions().getMaxMovement(),countMovsApply)
                 && dayAllowed.test(clientAccount.getAccountType().getConditions().getDiaMovement());
 
+    }
+    public ClientAccount getClientAccountbyId(String idAccount){
+        return clientAccountRepository.findById(idAccount).as(RxJava3Adapter::monoToMaybe).blockingGet();
+    }
+    public Flowable<ClientAccount> getAllClientAccount(){
+        return clientAccountRepository.findAll()
+                .as(RxJava3Adapter::fluxToFlowable);
     }
 
 }

@@ -1,5 +1,7 @@
 package proyecto.bootcamp.banca.cuenta;
 
+import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.core.Maybe;
 import lombok.AllArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -16,12 +18,12 @@ import java.util.List;
 public class AccountController {
     private final AccountService accountService;
     @GetMapping()
-    public List<ClientAccount> fetchAllClientAccount(){
+    public Flowable<ClientAccount> fetchAllClientAccount(){
         return accountService.getAllClientAccount();
     }
 
     @GetMapping("/{nroCuenta}")
-    public ClientAccount fetchClientAccount(@PathVariable("nroCuenta") String nroCuenta){
+    public Maybe<ClientAccount> fetchClientAccount(@PathVariable("nroCuenta") String nroCuenta){
 
         return accountService.getClientAccount(nroCuenta);
     }
@@ -33,13 +35,13 @@ public class AccountController {
     }
 
     @PostMapping("/deposit")
-    public Boolean  depositClientAccount( @RequestParam("nroCuenta") String nroCuenta ,
+    public Maybe<ClientAccount>  depositClientAccount( @RequestParam("nroCuenta") String nroCuenta ,
                                         @RequestParam("monto") Double amount){
-        return accountService.addDeposit(nroCuenta, amount);
+        return accountService.addReactiveDeposit(nroCuenta, amount);
     }
     @PostMapping("/withdrawal")
-    public Boolean  withdrawalClientAccount( @RequestParam("nroCuenta") String nroCuenta ,
-                                        @RequestParam("monto") Double amount){
-        return accountService.addWithdrawal(nroCuenta, amount);
+    public Maybe<ClientAccount>  withdrawalClientAccount(@RequestParam("nroCuenta") String nroCuenta ,
+                                                         @RequestParam("monto") Double amount){
+        return accountService.addReactiveWithdrawal(nroCuenta, amount);
     }
 }
