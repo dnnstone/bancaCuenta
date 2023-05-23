@@ -21,6 +21,11 @@ public class AccountController {
     public Flowable<ClientAccount> fetchAllClientAccount(){
         return accountService.getAllClientAccount();
     }
+    @GetMapping("/client/ndoc/{nDoc}")
+    public Flowable<ClientAccount> getAllClientAccountbyClientDoc(@PathVariable("nDoc") String nDoc){
+
+        return accountService.getAllClientAccountByDoc(nDoc);
+    }
 
     @GetMapping("/{nroCuenta}")
     public Maybe<ClientAccount> fetchClientAccount(@PathVariable("nroCuenta") String nroCuenta){

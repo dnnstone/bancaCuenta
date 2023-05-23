@@ -51,7 +51,7 @@ public class AccountService {
                 .as(RxJava3Adapter::monoToMaybe)
                 .map(client->{
                     RestTemplate restTemplate= new RestTemplate();
-                    client.setClient(restTemplate.getForObject(env.getProperty("apis.cliente")+client.getClient().getId(), Client.class));;
+                    client.setClient(restTemplate.getForObject(env.getProperty("apis.cliente")+client.getClient().getId(), Client.class));
                     return client;
                 });
 
@@ -170,5 +170,14 @@ public class AccountService {
         return clientAccountRepository.findAll()
                 .as(RxJava3Adapter::fluxToFlowable);
     }
+    public Flowable<ClientAccount> getAllClientAccountByDoc(String nDoc){
+//        Query query =new Query();
+//        query.addCriteria(Criteria.where("client.nDoc").is(nDoc));
+//        return mongoTemplate
+//                .find(query, ClientAccount.class)
+//                .as(RxJava3Adapter::fluxToFlowable);
 
+        return clientAccountRepository.findAll().filter(s->s.getClient().getNDoc().equals(nDoc))
+                .as(RxJava3Adapter::fluxToFlowable);
+    }
 }
