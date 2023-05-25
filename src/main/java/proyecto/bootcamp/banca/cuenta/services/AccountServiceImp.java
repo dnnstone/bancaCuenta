@@ -13,19 +13,14 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import proyecto.bootcamp.banca.cuenta.dto.InputAccountClientDTO;
-import proyecto.bootcamp.banca.cuenta.model.Client;
-import proyecto.bootcamp.banca.cuenta.model.ClientAccount;
-import proyecto.bootcamp.banca.cuenta.model.Movement;
+import proyecto.bootcamp.banca.cuenta.model.*;
 import proyecto.bootcamp.banca.cuenta.repository.AccountTypeRepository;
 import proyecto.bootcamp.banca.cuenta.repository.ClientAccountRepository;
 import proyecto.bootcamp.banca.cuenta.repository.ClientRepository;
 import proyecto.bootcamp.banca.cuenta.utils.ClientAccountUtils;
 import reactor.adapter.rxjava.RxJava3Adapter;
 
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -122,13 +117,25 @@ public class AccountServiceImp implements AccountService{
         return Maybe.just(inputAccountClientDTO)
                 .map(s->{
                     List<Movement> movements= new ArrayList<>();
-                    if(!s.getInitialAmount().equals(0))
-                    {movements.add(new Movement("initial",s.getInitialAmount(),new Date()));}
-                    return new ClientAccount("0033-989898-"+ ClientAccountUtils.createNumber()
-                            ,accountTypeRepository.findById(s.getTypeAccountId()).block()
-                            ,clientRepository.findById(s.getClientId()).block()
-                            ,movements
-                            ,s.getInitialAmount());
+                    if(!s.getInitialAmount().equals(0.0))
+                    {
+                        movements.add(new Movement("initial",s.getInitialAmount(),new Date()));
+                    }
+                    AccountType accountTypeTemp= accountTypeRepository.findById(s.getTypeAccountId()).block();
+
+                    Client clientTemp=clientRepository.findById(s.getClientId()).block();
+
+                    if(this.isAllowedToNewAccount(clientTemp,accountTypeTemp)){
+                        return new ClientAccount("0033-"+ ClientAccountUtils.createNumber()
+                                ,accountTypeRepository.findById(s.getTypeAccountId()).block()
+                                ,clientRepository.findById(s.getClientId()).block()
+                                ,movements
+                                ,s.getInitialAmount());
+                    }else {
+                        return null;
+                    }
+
+
                 })
                 .to(RxJava3Adapter::maybeToMono)
                 .flatMap(clientAccountRepository::insert).as(RxJava3Adapter::monoToMaybe);
@@ -155,6 +162,57 @@ public class AccountServiceImp implements AccountService{
         logger.info("Dnns: Dia configurado: "+clientAccount.getAccountType().getConditions().getDiaMovement()+" Día hoy: "+calendar.get(Calendar.DAY_OF_MONTH));
         return maxMovements.test(clientAccount.getAccountType().getConditions().getMaxMovement(),countMovsApply)
                 && dayAllowed.test(clientAccount.getAccountType().getConditions().getDiaMovement());
+
+    }
+
+    private Boolean isAllowedToNewAccount(Client clientTemp,AccountType accountTypeTemp){
+        //-1 significa ilimitado
+        Long nAccountsLikeCreate= this.getAllClientAccountByDoc(clientTemp.getNDoc())
+                .filter(cliAcc->cliAcc.getAccountType().getName().equals(accountTypeTemp.getName()))
+                .count().blockingGet(); //cuentas de cliente que son como las que se quiere crear
+        Long nAllAccountsClient= this.getAllClientAccountByDoc(clientTemp.getNDoc())
+                .count().blockingGet();
+        Long nCcAccountsClient= this.getAllClientAccountByDoc(clientTemp.getNDoc())
+                .filter(cliAcc->cliAcc.getAccountType().getName().equals("Corriente"))
+                .count().blockingGet();
+        Long nCaAccountsClient= this.getAllClientAccountByDoc(clientTemp.getNDoc())
+                .filter(cliAcc->cliAcc.getAccountType().getName().equals("Ahorros"))
+                .count().blockingGet();
+        Long nCpfAccountsClient= this.getAllClientAccountByDoc(clientTemp.getNDoc())
+                .filter(cliAcc->cliAcc.getAccountType().getName().equals("Plazo Fijo"))
+                .count().blockingGet();
+
+        Integer dato= accountTypeTemp.getName().equals("Corriente")?clientTemp.getTypeClient().getAccountConditions().getNMaxCCorriente():
+                (accountTypeTemp.getName().equals("Ahorros")?clientTemp.getTypeClient().getAccountConditions().getNMaxCAhorro():
+                        (accountTypeTemp.getName().equals("Plazo Fijo")?clientTemp.getTypeClient().getAccountConditions().getNMaxCPFijo():0));
+
+        System.out.println("totale cuenta: "+nAllAccountsClient+" permitidos: "+clientTemp.getTypeClient().getAccountConditions().getNMaxCuentas()+"\n"+
+                " cuentas del tipo que se quiere crear: "+nAccountsLikeCreate+""+accountTypeTemp.getName()+"son"+dato+"\n"+
+                " cuentas del tipo Corriente: "+nCcAccountsClient+" permitidos: "+clientTemp.getTypeClient().getAccountConditions().getNMaxCCorriente()+"\n"+
+                " cuentas del tipo Ahorros: "+nCaAccountsClient+" permitidos: "+clientTemp.getTypeClient().getAccountConditions().getNMaxCAhorro()+"\n"+
+                " cuentas del tipo Plazo Fijo: "+nCpfAccountsClient+" permitidos: "+clientTemp.getTypeClient().getAccountConditions().getNMaxCPFijo()+"\n"+
+                "is OrCCCPF"+clientTemp.getTypeClient().getAccountConditions().getOrCCCPF());
+
+
+
+        Predicate<Client> allowTotalAccount= client->client.getTypeClient().getAccountConditions().getNMaxCuentas().equals(-1)||
+                this.getAllClientAccountByDoc(client.getNDoc()).count().blockingGet().compareTo(client.getTypeClient().getAccountConditions().getNMaxCuentas().longValue())<0;
+
+        Predicate<Client> allowTypeAccount= client->dato.equals(-1)||
+                this.getAllClientAccountByDoc(client.getNDoc())
+                        .filter(cliAcc->cliAcc.getAccountType().getName().equals(accountTypeTemp.getName()))
+                        .count().blockingGet().compareTo(dato.longValue())<0;
+
+        Predicate<Client>  allowOrCCCPF= client->(this.getAllClientAccountByDoc(client.getNDoc())
+                .filter(cliAcc->cliAcc.getAccountType().getName().equals("Corriente")).count().blockingGet()+this.getAllClientAccountByDoc(client.getNDoc())
+                .filter(cliAcc->cliAcc.getAccountType().getName().equals("Plazo Fijo")).count().blockingGet())<=1 ||
+                !clientTemp.getTypeClient().getAccountConditions().getOrCCCPF();
+
+    return
+            allowTotalAccount.test(clientTemp)
+            &&allowTypeAccount.test(clientTemp)
+            &&allowOrCCCPF.test(clientTemp)
+            ;
 
     }
 }
