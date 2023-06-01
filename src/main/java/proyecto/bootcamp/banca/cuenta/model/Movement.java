@@ -7,9 +7,9 @@ import java.util.Date;
 
 @Data
 public class Movement {
-    String type ;
-    Double amount;
-    Date date;
+    private String type ;
+    private Double amount;
+    private Date date;
 
     public Movement(String type, Double amount, Date date) {
         this.type = type;

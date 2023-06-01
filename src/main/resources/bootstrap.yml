@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: cuenta
+  cloud:
+    config:
+      uri: http//localhost:8888
+#      username: root
+#      password: secreto
+
