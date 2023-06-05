@@ -13,11 +13,11 @@ public interface AccountService {
     public Maybe<ClientAccount> getClientAccount(String nroAccount);
     public Maybe<ClientAccount> addReactiveDeposit(String nroAccount, Double amount);
     public Maybe<ClientAccount> addReactiveWithdrawal(String nroAccount, Double amount);
-    public ClientAccount getClientAccountbyId(String idAccount);
+    public Maybe<ClientAccount> getClientAccountbyId(String idAccount);
     public Flowable<ClientAccount> getAllClientAccount();
     public Flowable<ClientAccount> getAllClientAccountByDoc(String nDoc);
     public Maybe<ClientAccount> createClientAccount(InputAccountClientDTO inputAccountClientDTO);
-    public Single<ReportComissionDTO> getReportComissionByProducto(String tipoProducto);
+    public Maybe<ReportComissionDTO> getReportComissionByProducto(String tipoProducto);
     public Maybe<ClientAccount> getAccountWithTransfer(InputBankTransferDTO inputBankTransferDTO);
     public Single<ClientAccount> ifGetAccountWithTransfer(InputBankTransferDTO inputBankTransferDTO);
 }

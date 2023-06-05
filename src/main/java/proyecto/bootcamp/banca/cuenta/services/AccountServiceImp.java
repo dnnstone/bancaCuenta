@@ -107,8 +107,8 @@ public class AccountServiceImp implements AccountService{
     // Método Privado que verifica la configuración de la cuenta y detecta si es permitido
     // un movimiento adicional
     @Override
-    public ClientAccount getClientAccountbyId(String idAccount){
-        return clientAccountRepository.findById(idAccount).as(RxJava3Adapter::monoToMaybe).blockingGet();
+    public Maybe<ClientAccount> getClientAccountbyId(String idAccount){
+        return clientAccountRepository.findById(idAccount).as(RxJava3Adapter::monoToMaybe);
     }
     @Override
     public Flowable<ClientAccount> getAllClientAccount(){
@@ -288,7 +288,7 @@ public class AccountServiceImp implements AccountService{
         else{ return false;}
     }
 
-    public Single<ReportComissionDTO>  getReportComissionByProducto(String tipoProducto){
+    public Maybe<ReportComissionDTO>  getReportComissionByProducto(String tipoProducto){
         Query query =new Query();
         query.addCriteria(Criteria.where("name").is(tipoProducto));
         return  mongoTemplate.findOne(query, AccountType.class)
@@ -368,7 +368,7 @@ public class AccountServiceImp implements AccountService{
 
                     )  ;
                 })
-                .as(RxJava3Adapter::monoToSingle);
+                .as(RxJava3Adapter::monoToMaybe);
 
     }
     public Maybe<ClientAccount> getAccountWithTransfer(InputBankTransferDTO inputBankTransferDTO){
