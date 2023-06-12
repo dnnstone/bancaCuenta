@@ -234,9 +234,14 @@ public class AccountServiceImp implements AccountService{
         String url=env.getProperty("apis.credit")+"client/ndoc/"+clientTemp.getNDoc();
         logger.info("url credit: "+url);
 
+        String urlDebts=env.getProperty("apis.credit")+"hasDebt/"+clientTemp.getNDoc();
+        logger.info("urlDebts credit: "+urlDebts);
+
 
         Predicate<AccountType> allowCreditCar= accountType -> !accountType.getConditions().getWithCreditCar()|| restTemplate
                 .getForObject(url,ClientCreditDTO[].class).length>=1;
+
+        Predicate<Client> hasDebts= clientDebts -> restTemplate.getForObject(env.getProperty("apis.credit")+"hasDebt/"+clientDebts.getNDoc(),Boolean.class);
 
 
         Predicate<AccountType> allowWithMinimalAmount= accountType->amountToCheck>=accountType.getConditions().getMinAmount();
@@ -246,6 +251,7 @@ public class AccountServiceImp implements AccountService{
                 +" \nand con cuenta corriente"+allowWithCurrentAccount.test(clientTemp)
                 +" \nand minimo monto "+allowWithMinimalAmount.test(accountTypeTemp)
                 +" \nand credit car "+allowCreditCar.test(accountTypeTemp)
+                +" \nand hasDebts "+hasDebts.test(clientTemp)
         );
         return
             allowTotalAccount.test(clientTemp)
@@ -254,6 +260,7 @@ public class AccountServiceImp implements AccountService{
             &&allowWithCurrentAccount.test(clientTemp)
             &&allowWithMinimalAmount.test(accountTypeTemp)
             &&allowCreditCar.test(accountTypeTemp)
+            &&hasDebts.test(clientTemp)
             ;
     }
     private Boolean isAllowedMovementBySaldo(ClientAccount clientAccount,Double saldo,String tipoTransaction){

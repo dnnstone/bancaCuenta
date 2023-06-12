@@ -34,6 +34,9 @@ public class ClientAccount {
         this.client = client;
         this.movements = movements;
         this.saldo = saldo;
+        this.hasCard =false;
+        this.nOrder =0L;
+        this.nCard="";
     }
     public ClientAccount() {
         this.hasCard =false;
