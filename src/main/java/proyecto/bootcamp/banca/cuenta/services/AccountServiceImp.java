@@ -3,17 +3,14 @@ package proyecto.bootcamp.banca.cuenta.services;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Maybe;
 import io.reactivex.rxjava3.core.Single;
-import lombok.AllArgsConstructor;
+import org.bson.types.ObjectId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.AccumulatorOperators;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import proyecto.bootcamp.banca.cuenta.dto.*;
@@ -21,15 +18,18 @@ import proyecto.bootcamp.banca.cuenta.model.*;
 import proyecto.bootcamp.banca.cuenta.repository.AccountTypeRepository;
 import proyecto.bootcamp.banca.cuenta.repository.ClientAccountRepository;
 import proyecto.bootcamp.banca.cuenta.repository.ClientRepository;
+import proyecto.bootcamp.banca.cuenta.repository.DebitCardRepository;
 import proyecto.bootcamp.banca.cuenta.utils.ClientAccountUtils;
 import reactor.adapter.rxjava.RxJava3Adapter;
 
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 
 @Service
@@ -38,6 +38,8 @@ public class AccountServiceImp implements AccountService{
     private  ClientAccountRepository clientAccountRepository;
     @Autowired
     private  ClientRepository clientRepository;
+    @Autowired
+    private DebitCardRepository debitCardRepository;
     @Autowired
     private  AccountTypeRepository accountTypeRepository;
     @Autowired
@@ -86,7 +88,6 @@ public class AccountServiceImp implements AccountService{
     @Override
     public Maybe<ClientAccount> addReactiveWithdrawal(String nroAccount, Double amount){
         return this.getClientAccount(nroAccount)
-//                .filter(this::isAllowedMovement)    //filtros de cantidad de movs y fecha
                 .filter(cli->isAllowedMovementBySaldo(cli,amount,"retiro"))
                 .filter(s->s.getSaldo().compareTo(amount)>=0)   //filtro de saldo positivo
                 .map(cl->{
@@ -104,8 +105,6 @@ public class AccountServiceImp implements AccountService{
                 .as(RxJava3Adapter::monoToMaybe);
     }
 
-    // Método Privado que verifica la configuración de la cuenta y detecta si es permitido
-    // un movimiento adicional
     @Override
     public Maybe<ClientAccount> getClientAccountbyId(String idAccount){
         return clientAccountRepository.findById(idAccount).as(RxJava3Adapter::monoToMaybe);
@@ -148,7 +147,6 @@ public class AccountServiceImp implements AccountService{
                 .to(RxJava3Adapter::maybeToMono)
                 .flatMap(clientAccountRepository::insert).as(RxJava3Adapter::monoToMaybe);
     }
-
     private Boolean isAllowedMovement(ClientAccount clientAccount){
         Date today= new Date();
         Calendar calendar= Calendar.getInstance();
@@ -185,7 +183,6 @@ public class AccountServiceImp implements AccountService{
                 .as(RxJava3Adapter::monoToSingle)
                 .blockingGet();
     }
-
     private Boolean isAllowedToNewAccount(Client clientTemp,AccountType accountTypeTemp, Double amountToCheck){
 
         RestTemplate restTemplate= new RestTemplate();
@@ -287,7 +284,6 @@ public class AccountServiceImp implements AccountService{
         }
         else{ return false;}
     }
-
     public Maybe<ReportComissionDTO>  getReportComissionByProducto(String tipoProducto){
         Query query =new Query();
         query.addCriteria(Criteria.where("name").is(tipoProducto));
@@ -401,7 +397,6 @@ public class AccountServiceImp implements AccountService{
         //we're going to generate 2 operations, one will be an  withdrawal, and the another will be a deposit
 
     }
-
     public Single<ClientAccount> ifGetAccountWithTransfer(InputBankTransferDTO inputBankTransferDTO){
 //        return this.getClientAccount(inputBankTransferDTO.getOriginAccount())
 //                .filter(cli->cli.getSaldo()>= inputBankTransferDTO.getAmount()&& this.existAccount(inputBankTransferDTO.getDestinyAccount()))
@@ -422,6 +417,87 @@ public class AccountServiceImp implements AccountService{
             }
 
         });
+
+    }
+    public Maybe<OutputDebitCar> addDebitCard(String nClientAccount){
+        //first we find if nClientAccount has a CreditCar in ClientAccount fields, hasDebitCard
+        //then if it has, we return the information of its hasDebitCard, otherwise, we create a new DebitCard and update ClientAccount info
+        // initializing the fields hasDebitCar and norder
+        // if not, we find if the client has any debitcar, if him has, we return this Card and update ClientAccount info
+        // with hasDebitCar and norder consistent
+        return this.getClientAccount(nClientAccount).map(s->{
+            if(s.getHasCard()){
+                logger.info("1ro debitCard");
+                return new OutputDebitCar(debitCardRepository.findDebitCardByCardNumber(s.getNCard()).block(),s.getNAccount(),s.getNOrder());
+            }
+            else{
+                //check if the client has any deb
+                Flowable<ClientAccount> clientAccountTemp=this.getAllClientAccountByDoc(s.getClient().getNDoc()).filter(ca->ca.getHasCard());
+                if(clientAccountTemp.count().blockingGet()>0) //client has DebitCard
+                {   logger.info("2do debitCard");
+                    DebitCard debitCard= debitCardRepository.findDebitCardByCardNumber(
+                            clientAccountTemp.map(we->we.getNCard()).distinct().blockingFirst()
+                    ).block();
+                    debitCard.getClientAccountList().add(s);
+                    debitCardRepository.save(debitCard).block();
+                    s.setHasCard(true);
+                    s.setNOrder(clientAccountTemp.count().blockingGet()+1);
+                    s.setNCard(debitCard.getCardNumber());
+                    clientAccountRepository.save(s).block();
+
+                    return new OutputDebitCar(debitCard ,
+                                                s.getNAccount(),clientAccountTemp.count().blockingGet()+1);
+                }
+                else{//client hasn't  DebitCard
+
+                    ArrayList<ClientAccount> list = new ArrayList<>();
+                    String stringNCard="9999"+ClientAccountUtils.createNumber();
+                    s.setHasCard(true);
+                    s.setNOrder(1L);
+                    s.setNCard(stringNCard);
+                    ObjectId objectId= new ObjectId(stringNCard);
+                    list.add(s);
+                    DebitCard debitCard= new DebitCard(stringNCard
+                            ,s.getClient()
+                            ,list
+                            ,s);
+
+
+
+                    clientAccountRepository.save(s).block();
+
+                    debitCardRepository.insert(debitCard).block();
+                    return new OutputDebitCar(debitCard ,
+                            s.getNAccount(),1L);
+                }
+            }
+        });
+    }
+    public Maybe<ClientAccount> debitDebitCard(InputdebitDebitCardDTO inputdebitDebitCardDTO){
+
+        logger.info("verficicar {}",inputdebitDebitCardDTO.getDebitCardNumber());
+        logger.info("verficicar2 {}",inputdebitDebitCardDTO.toString());
+
+       return  debitCardRepository.findDebitCardByCardNumber(inputdebitDebitCardDTO.getDebitCardNumber())
+                .as(RxJava3Adapter::monoToFlowable)
+                .map(s->s.getClientAccountList())
+                .flatMapStream(s->{ return s.stream();})
+               .map(r->{logger.info("info de cuentas {} : saldo {} ",r.getNAccount(), r.getSaldo()); return r;})
+                .filter(cli->this.getClientAccount(cli.getNAccount()).blockingGet().getSaldo()>=inputdebitDebitCardDTO.getAmount())
+                .firstElement()
+                .map(g->{
+                    logger.info("verificarcion 2 {}", g.getSaldo());
+                    Movement movement = new Movement(inputdebitDebitCardDTO.getTypeDebit()
+                            ,inputdebitDebitCardDTO.getAmount()
+                            ,new Date() );
+                    ClientAccount clientAccountReal= this.getClientAccount(g.getNAccount()).blockingGet();
+                    clientAccountReal.getMovements().add(movement);
+                    clientAccountReal.setSaldo(clientAccountReal.getSaldo()- inputdebitDebitCardDTO.getAmount());
+                    clientAccountRepository.save(clientAccountReal).block();
+                    return clientAccountReal;
+                });
+
+
 
     }
 }
